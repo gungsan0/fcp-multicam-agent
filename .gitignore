@@ -8,3 +8,5 @@ venv/
 config.json
 output/
 assets/fonts/
+.DS_Store
+.claude/
