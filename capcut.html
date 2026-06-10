@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CapCut 멀티캠 에이전트</title>
+<style>
+  :root {
+    --bg: #0f0f0f; --surface: #1a1a1a; --border: #2a2a2a;
+    --accent: #00c2ff; --accent2: #ff4d94;
+    --text: #f0f0f0; --muted: #888; --success: #22c55e;
+    --warn: #f59e0b; --error: #ef4444;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; min-height: 100vh; }
+
+  /* Header */
+  .header { background: linear-gradient(135deg, #1a0030 0%, #000d20 100%); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
+  .header-logo { font-size: 24px; }
+  .header-title { font-size: 20px; font-weight: 700; }
+  .header-title span { color: var(--accent); }
+  .header-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .header-nav { margin-left: auto; display: flex; gap: 8px; }
+  .nav-btn { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; font-size: 12px; text-decoration: none; transition: all .2s; }
+  .nav-btn:hover, .nav-btn.active { border-color: var(--accent); color: var(--accent); }
+
+  /* Layout */
+  .container { max-width: 960px; margin: 0 auto; padding: 24px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  .card-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 16px; }
+
+  /* Drop zone */
+  .drop-zone { border: 2px dashed var(--border); border-radius: 10px; padding: 32px; text-align: center; cursor: pointer; transition: all .2s; min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: rgba(0,194,255,.05); }
+  .drop-zone .icon { font-size: 32px; }
+  .drop-zone .label { font-size: 14px; color: var(--muted); }
+  .drop-zone .hint { font-size: 12px; color: #555; }
+  .file-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .chip { display: flex; align-items: center; gap: 6px; background: rgba(0,194,255,.1); border: 1px solid rgba(0,194,255,.3); color: var(--accent); padding: 4px 10px; border-radius: 20px; font-size: 12px; }
+  .chip .remove { cursor: pointer; opacity: .6; }
+  .chip .remove:hover { opacity: 1; }
+
+  /* Role select */
+  .role-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .role-item { display: flex; align-items: center; gap: 8px; }
+  .role-item label { font-size: 12px; color: var(--muted); white-space: nowrap; min-width: 70px; }
+  .role-item select { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 5px 8px; border-radius: 6px; font-size: 12px; }
+
+  /* Form */
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group label { font-size: 12px; color: var(--muted); }
+  input[type="text"], input[type="number"] { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 6px; font-size: 13px; width: 100%; }
+  input:focus { outline: none; border-color: var(--accent); }
+
+  /* Start button */
+  .btn-start { width: 100%; padding: 14px; background: linear-gradient(90deg, var(--accent), #0070ff); color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; transition: all .2s; }
+  .btn-start:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,194,255,.4); }
+  .btn-start:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+  /* Pipeline stepper */
+  .stepper { display: flex; flex-direction: column; gap: 8px; }
+  .step { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); transition: all .3s; }
+  .step.pending { opacity: .4; }
+  .step.running { border-color: var(--accent); background: rgba(0,194,255,.05); }
+  .step.done { border-color: var(--success); background: rgba(34,197,94,.05); }
+  .step.error { border-color: var(--error); background: rgba(239,68,68,.05); }
+  .step-icon { font-size: 18px; min-width: 24px; text-align: center; }
+  .step-label { font-weight: 600; font-size: 13px; min-width: 110px; }
+  .step-msg { font-size: 12px; color: var(--muted); flex: 1; }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(0,194,255,.3); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Result */
+  .result-box { display: none; }
+  .result-box.show { display: block; }
+  .result-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font-size: 13px; text-decoration: none; transition: all .2s; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 700; }
+  .btn-primary:hover { background: #33d6ff; border-color: #33d6ff; color: #000; }
+  .btn-secondary { background: var(--accent2); border-color: var(--accent2); color: #fff; font-weight: 600; }
+  .btn-secondary:hover { opacity: .85; }
+
+  /* Info box */
+  .info-box { background: rgba(0,194,255,.08); border: 1px solid rgba(0,194,255,.25); border-radius: 8px; padding: 14px 16px; margin-top: 12px; font-size: 13px; line-height: 1.7; }
+  .info-box code { background: rgba(0,0,0,.4); padding: 1px 5px; border-radius: 3px; font-family: monospace; font-size: 12px; }
+
+  /* Timeline */
+  .timeline-bar { position: relative; height: 40px; background: var(--bg); border-radius: 6px; overflow: hidden; margin-top: 12px; border: 1px solid var(--border); }
+  .t-seg { position: absolute; top: 4px; bottom: 4px; border-radius: 3px; opacity: .85; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #fff; overflow: hidden; cursor: pointer; transition: opacity .2s; }
+  .t-seg:hover { opacity: 1; }
+
+  /* Log window */
+  #log-window { position: fixed; bottom: 20px; right: 20px; width: 380px; max-height: 300px; background: rgba(10,10,10,.95); border: 1px solid var(--border); border-radius: 12px; font-family: monospace; font-size: 11px; z-index: 1000; display: none; flex-direction: column; backdrop-filter: blur(10px); box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+  #log-window.show { display: flex; }
+  #log-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--border); cursor: move; user-select: none; }
+  #log-body { flex: 1; overflow-y: auto; padding: 10px 12px; }
+  .log-line { color: #a0a0a0; line-height: 1.6; }
+  .log-line.error { color: var(--error); }
+  .log-line.info { color: #7dc8ff; }
+  #log-toggle { position: fixed; bottom: 20px; right: 20px; padding: 8px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; cursor: pointer; font-size: 12px; z-index: 999; transition: all .2s; }
+  #log-toggle:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">🎬</div>
+  <div>
+    <div class="header-title">CapCut <span>멀티캠 에이전트</span></div>
+    <div class="header-sub">AI 자동 컷편집 → CapCut 프로젝트 내보내기</div>
+  </div>
+  <nav class="header-nav">
+    <a href="/" class="nav-btn">Final Cut Pro</a>
+    <a href="/capcut" class="nav-btn active">CapCut</a>
+  </nav>
+</div>
+
+<div class="container">
+
+  <!-- 카메라 파일 업로드 -->
+  <div class="card">
+    <div class="card-title">📹 카메라 영상 파일</div>
+    <div class="drop-zone" id="camDrop">
+      <div class="icon">🎥</div>
+      <div class="label">카메라 파일을 여기에 드래그하거나 클릭해서 선택</div>
+      <div class="hint">MP4, MOV 지원 · 여러 파일 동시 선택 가능</div>
+    </div>
+    <input type="file" id="camInput" accept="video/*" multiple style="display:none">
+    <div class="file-chips" id="camChips"></div>
+
+    <div id="roleContainer" style="margin-top:14px;display:none;">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">카메라 역할 지정</div>
+      <div class="role-grid" id="roleGrid"></div>
+    </div>
+  </div>
+
+  <!-- 마스터 오디오 -->
+  <div class="card">
+    <div class="card-title">🎵 마스터 오디오 (선택)</div>
+    <div class="drop-zone" id="audioDrop" style="min-height:80px;">
+      <div class="icon">🎵</div>
+      <div class="label">음원 파일 드래그 (없으면 cam1 오디오 사용)</div>
+      <div class="hint">WAV, MP3, AAC, M4A, FLAC 지원</div>
+    </div>
+    <input type="file" id="audioInput" accept="audio/*,video/*" style="display:none">
+    <div id="audioChip" style="margin-top:8px;"></div>
+  </div>
+
+  <!-- 프로젝트 설정 -->
+  <div class="card">
+    <div class="card-title">⚙️ 프로젝트 설정</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>곡 제목 *</label>
+        <input type="text" id="songTitle" placeholder="예: 선한 능력으로">
+      </div>
+      <div class="form-group">
+        <label>아티스트</label>
+        <input type="text" id="performer" placeholder="예: 예배팀">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>최소 컷 길이 (초)</label>
+        <input type="number" id="minCut" value="3" min="1" max="30" step="0.5">
+      </div>
+      <div class="form-group">
+        <label>최대 컷 길이 (초)</label>
+        <input type="number" id="maxCut" value="12" min="3" max="60" step="0.5">
+      </div>
+    </div>
+  </div>
+
+  <!-- 시작 버튼 -->
+  <button class="btn-start" id="btnStart" onclick="runPipeline()">
+    ▶ CapCut 편집 시작
+  </button>
+
+  <!-- 파이프라인 진행 -->
+  <div class="card" id="pipelineCard" style="margin-top:16px;display:none;">
+    <div class="card-title">⚡ 파이프라인 진행</div>
+    <div class="stepper" id="stepper">
+      <div class="step pending" id="step-upload">
+        <span class="step-icon">💾</span>
+        <span class="step-label">파일 업로드</span>
+        <span class="step-msg">대기 중</span>
+      </div>
+      <div class="step pending" id="step-sync">
+        <span class="step-icon">🔗</span>
+        <span class="step-label">오디오 싱크</span>
+        <span class="step-msg">대기 중</span>
+      </div>
+      <div class="step pending" id="step-asr">
+        <span class="step-icon">💬</span>
+        <span class="step-label">가사 인식</span>
+        <span class="step-msg">대기 중</span>
+      </div>
+      <div class="step pending" id="step-cam_select">
+        <span class="step-icon">✂️</span>
+        <span class="step-label">카메라 선택</span>
+        <span class="step-msg">대기 중</span>
+      </div>
+      <div class="step pending" id="step-capcut_export">
+        <span class="step-icon">📦</span>
+        <span class="step-label">CapCut 내보내기</span>
+        <span class="step-msg">대기 중</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 타임라인 -->
+  <div class="card" id="timelineCard" style="display:none;">
+    <div class="card-title">📊 컷 타임라인</div>
+    <div class="timeline-bar" id="timelineBar"></div>
+    <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;" id="camLegend"></div>
+  </div>
+
+  <!-- 결과 -->
+  <div class="card result-box" id="resultCard">
+    <div class="card-title">✅ 완료!</div>
+    <div class="info-box" id="resultInfo">
+      CapCut 프로젝트가 생성되었습니다.
+    </div>
+    <div class="result-actions" id="resultActions"></div>
+  </div>
+
+</div>
+
+<!-- 로그 토글 버튼 -->
+<button id="log-toggle" onclick="toggleLog()">🖥 로그</button>
+
+<!-- 로그 창 -->
+<div id="log-window">
+  <div id="log-header">
+    <span style="font-size:12px;color:var(--muted)">🖥 서버 로그</span>
+    <span onclick="toggleLog()" style="cursor:pointer;color:var(--muted);font-size:16px;padding:0 4px;">✕</span>
+  </div>
+  <div id="log-body"></div>
+</div>
+
+<script>
+  let camFiles = [];
+  let audioFile = null;
+  let draftDirAbs = "";
+
+  const CAM_COLORS = ["#00c2ff","#ff4d94","#22c55e","#f59e0b","#a855f7","#f97316"];
+
+  // ── 파일 드래그앤드롭 ─────────────────────────
+  function setupDrop(zoneId, inputId, multi, onFiles) {
+    const zone = document.getElementById(zoneId);
+    const input = document.getElementById(inputId);
+    zone.onclick = () => input.click();
+    input.onchange = () => onFiles(Array.from(input.files));
+    zone.ondragover = (e) => { e.preventDefault(); zone.classList.add("drag-over"); };
+    zone.ondragleave = () => zone.classList.remove("drag-over");
+    zone.ondrop = (e) => {
+      e.preventDefault();
+      zone.classList.remove("drag-over");
+      const files = Array.from(e.dataTransfer.files);
+      onFiles(files);
+    };
+  }
+
+  setupDrop("camDrop", "camInput", true, (files) => {
+    const vids = files.filter(f => f.type.startsWith("video/") || /\.(mp4|mov|mts|m2ts|avi|mkv)$/i.test(f.name));
+    if (!vids.length) return;
+    camFiles = [...camFiles, ...vids];
+    renderCamChips();
+    renderRoles();
+  });
+
+  setupDrop("audioDrop", "audioInput", false, (files) => {
+    if (files.length) {
+      audioFile = files[0];
+      document.getElementById("audioChip").innerHTML =
+        `<div class="chip" style="border-color:rgba(255,77,148,.4);color:#ff4d94;background:rgba(255,77,148,.1);">🎵 ${audioFile.name} <span class="remove" onclick="audioFile=null;this.parentElement.parentElement.innerHTML=''">✕</span></div>`;
+    }
+  });
+
+  function renderCamChips() {
+    const el = document.getElementById("camChips");
+    el.innerHTML = camFiles.map((f,i) =>
+      `<div class="chip" style="border-color:${CAM_COLORS[i%CAM_COLORS.length]}44;color:${CAM_COLORS[i%CAM_COLORS.length]};background:${CAM_COLORS[i%CAM_COLORS.length]}18;">
+        🎥 cam${i+1}: ${f.name}
+        <span class="remove" onclick="removeCam(${i})">✕</span>
+      </div>`
+    ).join("");
+  }
+
+  function removeCam(i) {
+    camFiles.splice(i, 1);
+    renderCamChips();
+    renderRoles();
+  }
+
+  function renderRoles() {
+    const container = document.getElementById("roleContainer");
+    const grid = document.getElementById("roleGrid");
+    if (!camFiles.length) { container.style.display = "none"; return; }
+    container.style.display = "block";
+    const roles = ["wide", "close", "side", "overhead", "speaker"];
+    grid.innerHTML = camFiles.map((f,i) =>
+      `<div class="role-item">
+        <label style="color:${CAM_COLORS[i%CAM_COLORS.length]}">cam${i+1}</label>
+        <select id="role_cam${i+1}">
+          ${roles.map(r => `<option value="${r}" ${(i===0&&r==="wide")||(i===1&&r==="close")||(i===2&&r==="side")?"selected":""}>${r}</option>`).join("")}
+        </select>
+      </div>`
+    ).join("");
+  }
+
+  // ── 파이프라인 ──────────────────────────────
+  async function runPipeline() {
+    openLog();
+
+    if (!camFiles.length) { alert("카메라 파일을 먼저 추가해주세요."); return; }
+    const songTitle = document.getElementById("songTitle").value.trim();
+    if (!songTitle) {
+      document.getElementById("songTitle").style.borderColor = "var(--error)";
+      document.getElementById("songTitle").focus();
+      return;
+    }
+    document.getElementById("songTitle").style.borderColor = "";
+
+    document.getElementById("btnStart").disabled = true;
+    document.getElementById("pipelineCard").style.display = "block";
+    document.getElementById("resultCard").classList.remove("show");
+    document.getElementById("timelineCard").style.display = "none";
+
+    // 모든 스텝 pending으로 초기화
+    ["upload","sync","asr","cam_select","capcut_export"].forEach(s => setStep(s,"pending","대기 중"));
+
+    const fd = new FormData();
+    camFiles.forEach(f => fd.append("cameras", f));
+    if (audioFile) fd.append("master_audio", audioFile);
+    fd.append("song_title", songTitle);
+    fd.append("performer", document.getElementById("performer").value);
+    fd.append("min_cut_sec", document.getElementById("minCut").value);
+    fd.append("max_cut_sec", document.getElementById("maxCut").value);
+
+    const roles = {};
+    camFiles.forEach((_, i) => {
+      const sel = document.getElementById(`role_cam${i+1}`);
+      if (sel) roles[`cam${i+1}`] = sel.value;
+    });
+    fd.append("cam_roles", JSON.stringify(roles));
+
+    try {
+      const resp = await fetch("/process/capcut", { method: "POST", body: fd });
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let parts = buf.split("\n\n");
+        buf = parts.pop();
+        for (const part of parts) {
+          const evLine = part.match(/^event: (.+)/m);
+          const dataLine = part.match(/^data: (.+)/ms);
+          if (!dataLine) continue;
+          const evt = evLine ? evLine[1].trim() : "progress";
+          const data = JSON.parse(dataLine[1]);
+          handleSSE(evt, data);
+        }
+      }
+    } catch (err) {
+      addLog(`연결 오류: ${err}`, "error");
+    }
+
+    document.getElementById("btnStart").disabled = false;
+  }
+
+  function handleSSE(evt, data) {
+    if (evt === "progress") {
+      const state = data.done ? "done" : "running";
+      setStep(data.step, state, data.msg || "");
+      addLog(data.msg || data.step);
+      if (data.cuts) renderTimeline(data.cuts);
+    } else if (evt === "done") {
+      addLog("✅ CapCut 프로젝트 생성 완료!", "info");
+      draftDirAbs = data.draft_dir_abs || "";
+      showResult(data);
+    } else if (evt === "error") {
+      addLog(`❌ 오류: ${data.msg}`, "error");
+      setStep("capcut_export", "error", data.msg);
+    }
+  }
+
+  function setStep(stepId, state, msg) {
+    const el = document.getElementById(`step-${stepId}`);
+    if (!el) return;
+    el.className = `step ${state}`;
+    const msgEl = el.querySelector(".step-msg");
+    if (msgEl) msgEl.textContent = msg;
+    const iconEl = el.querySelector(".step-icon");
+    if (state === "running") {
+      iconEl.innerHTML = '<span class="spinner"></span>';
+    } else if (state === "done") {
+      const icons = { upload:"💾", sync:"🔗", asr:"💬", cam_select:"✂️", capcut_export:"📦" };
+      iconEl.textContent = icons[stepId] || "✅";
+    }
+  }
+
+  function renderTimeline(cuts) {
+    if (!cuts || !cuts.length) return;
+    document.getElementById("timelineCard").style.display = "block";
+    const bar = document.getElementById("timelineBar");
+    const total = cuts[cuts.length - 1].end;
+    bar.innerHTML = cuts.map(c => {
+      const left = (c.start / total * 100).toFixed(2);
+      const width = ((c.end - c.start) / total * 100).toFixed(2);
+      const color = CAM_COLORS[c.cam % CAM_COLORS.length];
+      return `<div class="t-seg" style="left:${left}%;width:${width}%;background:${color};" title="cam${c.cam+1}: ${c.start.toFixed(1)}~${c.end.toFixed(1)}s">c${c.cam+1}</div>`;
+    }).join("");
+
+    // 범례
+    const seen = new Set();
+    const legend = document.getElementById("camLegend");
+    legend.innerHTML = "";
+    cuts.forEach(c => {
+      if (!seen.has(c.cam)) {
+        seen.add(c.cam);
+        const d = document.createElement("div");
+        d.innerHTML = `<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${CAM_COLORS[c.cam%CAM_COLORS.length]};margin-right:5px;"></span><span style="font-size:11px;color:var(--muted)">cam${c.cam+1}</span>`;
+        legend.appendChild(d);
+      }
+    });
+  }
+
+  function showResult(data) {
+    const card = document.getElementById("resultCard");
+    card.classList.add("show");
+
+    const info = document.getElementById("resultInfo");
+    info.innerHTML = `
+      CapCut 프로젝트가 생성되었습니다.<br><br>
+      <b>사용 방법 (CapCut Mac):</b><br>
+      1. 아래 <b>"📁 Finder에서 열기"</b> 버튼 클릭<br>
+      2. 생성된 폴더를 확인합니다<br>
+      3. CapCut 앱 → <code>⌘ O</code> (불러오기) → 폴더 선택<br>
+      4. 또는 <b>"📲 CapCut에 설치"</b> 버튼으로 자동 설치 후 CapCut 재시작<br><br>
+      <span style="color:var(--muted);font-size:12px;">💡 CapCut 미설치 시 <a href="https://www.capcut.com/ko-kr/" target="_blank" style="color:var(--accent)">capcut.com</a> 에서 무료 다운로드</span>
+    `;
+
+    const actions = document.getElementById("resultActions");
+    actions.innerHTML = `
+      <button class="btn btn-primary" onclick="openFolder('${data.draft_dir}')">📁 Finder에서 열기</button>
+      <button class="btn btn-secondary" onclick="installCapcut('${data.draft_dir}')">📲 CapCut에 설치</button>
+    `;
+  }
+
+  async function openFolder(relPath) {
+    await fetch(`/open/capcut?path=${encodeURIComponent(relPath)}`);
+  }
+
+  async function installCapcut(relPath) {
+    try {
+      const r = await fetch(`/install/capcut?path=${encodeURIComponent(relPath)}`);
+      const j = await r.json();
+      if (j.ok) {
+        alert(`✅ CapCut 프로젝트 설치 완료!\n경로: ${j.path}\n\nCapCut을 재시작하면 프로젝트가 나타납니다.`);
+      } else {
+        alert("설치 실패: " + JSON.stringify(j));
+      }
+    } catch (e) {
+      alert("설치 오류: " + e);
+    }
+  }
+
+  // ── 로그 창 ──────────────────────────────────
+  function openLog() {
+    document.getElementById("log-window").classList.add("show");
+    document.getElementById("log-toggle").style.display = "none";
+  }
+  function toggleLog() {
+    const w = document.getElementById("log-window");
+    const t = document.getElementById("log-toggle");
+    if (w.classList.contains("show")) {
+      w.classList.remove("show");
+      t.style.display = "block";
+    } else {
+      w.classList.add("show");
+      t.style.display = "none";
+    }
+  }
+  function addLog(msg, level = "log") {
+    const body = document.getElementById("log-body");
+    const d = document.createElement("div");
+    d.className = `log-line ${level}`;
+    d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    body.appendChild(d);
+    body.scrollTop = body.scrollHeight;
+  }
+
+  // 서버 로그 SSE
+  (function connectServerLog() {
+    const es = new EventSource("/logs");
+    es.onmessage = (e) => {
+      try {
+        const d = JSON.parse(e.data);
+        addLog(d.msg || e.data, d.level === "error" ? "error" : "log");
+      } catch { addLog(e.data); }
+    };
+    es.onerror = () => setTimeout(connectServerLog, 3000);
+  })();
+
+  // 로그창 드래그
+  (function setupLogDrag() {
+    const win = document.getElementById("log-window");
+    const header = document.getElementById("log-header");
+    let dragging = false, ox = 0, oy = 0;
+    header.addEventListener("mousedown", (e) => {
+      dragging = true;
+      const r = win.getBoundingClientRect();
+      ox = e.clientX - r.left;
+      oy = e.clientY - r.top;
+    });
+    document.addEventListener("mousemove", (e) => {
+      if (!dragging) return;
+      win.style.right = "auto";
+      win.style.bottom = "auto";
+      win.style.left = (e.clientX - ox) + "px";
+      win.style.top = (e.clientY - oy) + "px";
+    });
+    document.addEventListener("mouseup", () => dragging = false);
+  })();
+</script>
+</body>
+</html>

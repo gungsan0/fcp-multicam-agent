@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FCP MultiCam Agent</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a0a;
+    --card: #161616;
+    --border: #2a2a2a;
+    --green: #22c55e;
+    --purple: #7c3aed;
+    --muted: #6b7280;
+    --text: #f3f4f6;
+    --sub: #9ca3af;
+  }
+  body { background: var(--bg); color: var(--text); font-family: 'SF Pro Display', 'Inter', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+  /* ── 헤더 ── */
+  .header { padding: 20px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; position: sticky; top: 0; background: rgba(10,10,10,0.95); backdrop-filter: blur(10px); z-index: 100; }
+  .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .logo-text { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; }
+  .logo-sub { font-size: 12px; color: var(--muted); font-feature-settings: "tnum"; margin-left: auto; }
+  .btn-cfg { margin-left: auto; background: none; border: 1px solid var(--border); color: var(--sub); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all .2s; display: flex; align-items: center; gap: 6px; }
+  .btn-cfg:hover { border-color: var(--green); color: var(--green); }
+
+  /* ── 채널 설정 패널 ── */
+  .config-panel { background: var(--card); border-bottom: 1px solid var(--border); overflow: hidden; max-height: 0; transition: max-height .35s ease; }
+  .config-panel.open { max-height: 900px; }
+  .config-inner { padding: 28px 32px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .cfg-group { display: flex; flex-direction: column; gap: 6px; }
+  .cfg-group label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .cfg-group input, .cfg-group select { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 13px; width: 100%; transition: border-color .2s; }
+  .cfg-group input:focus, .cfg-group select:focus { outline: none; border-color: var(--green); }
+  .cfg-group input[type=color] { padding: 2px 4px; height: 36px; cursor: pointer; }
+  .cfg-group input[type=range] { padding: 8px 0; accent-color: var(--green); }
+  .cfg-footer { grid-column: 1/-1; display: flex; gap: 10px; align-items: center; }
+  .btn-save { background: var(--green); color: #000; padding: 8px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; }
+  .btn-reset { background: none; border: 1px solid var(--border); color: var(--muted); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .toast { font-size: 12px; color: var(--green); opacity: 0; transition: opacity .3s; }
+  .layout-radio { display: flex; gap: 8px; }
+  .layout-radio label { cursor: pointer; padding: 6px 14px; border: 1px solid var(--border); border-radius: 5px; font-size: 12px; color: var(--sub); transition: all .2s; }
+  .layout-radio input[type=radio] { display: none; }
+  .layout-radio input:checked + label { border-color: var(--green); color: var(--green); background: rgba(34,197,94,.08); }
+  .cfg-upload-area { border: 1px dashed var(--border); border-radius: 6px; padding: 10px; text-align: center; cursor: pointer; font-size: 12px; color: var(--muted); transition: border-color .2s; }
+  .cfg-upload-area:hover { border-color: var(--green); }
+
+  /* ── 메인 레이아웃 ── */
+  .main { padding: 32px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 1400px; margin: 0 auto; }
+  @media (max-width: 900px) { .main { grid-template-columns: 1fr; } }
+
+  /* ── 카드 ── */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+  .card-title { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
+  .card-title .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .card-title .dot.purple { background: var(--purple); box-shadow: 0 0 6px var(--purple); }
+
+  /* ── 드롭존 ── */
+  .dropzone { border: 1px dashed var(--border); border-radius: 8px; padding: 32px; text-align: center; cursor: pointer; transition: all .2s; position: relative; }
+  .dropzone:hover, .dropzone.dragover { border-color: var(--green); background: rgba(34,197,94,.04); }
+  .dropzone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .dropzone-icon { font-size: 28px; margin-bottom: 8px; }
+  .dropzone-text { color: var(--sub); font-size: 13px; }
+  .dropzone-text span { color: var(--green); }
+  .file-list { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .file-item { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 12px; display: flex; align-items: center; gap: 8px; font-feature-settings: "tnum"; }
+  .file-badge { background: rgba(34,197,94,.15); color: var(--green); padding: 2px 8px; border-radius: 3px; font-size: 10px; font-weight: 600; }
+  .file-badge.audio { background: rgba(124,58,237,.15); color: var(--purple); }
+  .file-remove { margin-left: auto; color: var(--muted); cursor: pointer; }
+  .file-remove:hover { color: #ef4444; }
+
+  /* ── 폼 ── */
+  .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .form-group label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .form-group input, .form-group select { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 9px 13px; border-radius: 6px; font-size: 13px; transition: border-color .2s; }
+  .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--green); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-group input[type=color] { padding: 2px 4px; height: 38px; cursor: pointer; }
+  .form-group input[type=range] { padding: 8px 0; accent-color: var(--purple); }
+  .range-val { font-size: 11px; color: var(--green); font-feature-settings: "tnum"; }
+
+  /* ── 실행 버튼 ── */
+  .btn-run { width: 100%; background: var(--green); color: #000; font-weight: 700; font-size: 15px; padding: 14px; border: none; border-radius: 8px; cursor: pointer; transition: all .2s; letter-spacing: .02em; }
+  .btn-run:hover { background: #16a34a; }
+  .btn-run:disabled { background: #1a3a2a; color: #2d6a4a; cursor: not-allowed; }
+
+  /* ── 스테퍼 ── */
+  .stepper { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+  .step { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); transition: all .3s; }
+  .step.active { border-color: var(--green); background: rgba(34,197,94,.06); }
+  .step.done { border-color: #1a3a2a; background: rgba(34,197,94,.04); }
+  .step.error { border-color: #7f1d1d; background: rgba(239,68,68,.06); }
+  .step-icon { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
+  .step-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; width: 90px; flex-shrink: 0; }
+  .step-msg { font-size: 12px; color: var(--sub); flex: 1; }
+  .step.active .step-msg { color: var(--text); }
+  .step.done .step-label { color: var(--green); }
+  .spin { display: inline-block; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── 결과 섹션 ── */
+  .result-section { margin-top: 24px; display: none; }
+  .result-section.visible { display: block; }
+  .btn-open { background: none; border: 1px solid var(--green); color: var(--green); padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; margin-bottom: 16px; transition: all .2s; }
+  .btn-open:hover { background: rgba(34,197,94,.1); }
+
+  /* ── 타임라인 시각화 ── */
+  .timeline-bar { width: 100%; height: 32px; background: var(--bg); border-radius: 4px; overflow: hidden; display: flex; margin-top: 10px; border: 1px solid var(--border); }
+  .timeline-seg { height: 100%; opacity: 0.85; transition: opacity .2s; cursor: default; }
+  .timeline-seg:hover { opacity: 1; }
+  .cam-legend { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+  .cam-legend-item { font-size: 11px; display: flex; align-items: center; gap: 5px; }
+  .cam-swatch { width: 12px; height: 12px; border-radius: 2px; }
+
+  /* ── 썸네일 ── */
+  .thumb-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
+  .thumb-card { border-radius: 8px; overflow: hidden; border: 2px solid var(--border); cursor: pointer; position: relative; aspect-ratio: 16/9; transition: border-color .2s, transform .2s; }
+  .thumb-card:hover { border-color: var(--purple); transform: scale(1.02); }
+  .thumb-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb-label { position: absolute; bottom: 0; left: 0; right: 0; padding: 6px 8px; background: rgba(0,0,0,.7); font-size: 11px; color: var(--sub); }
+  .thumb-score { position: absolute; top: 6px; right: 8px; background: rgba(124,58,237,.8); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 3px; font-feature-settings: "tnum"; }
+  .btn-dl-zip { background: var(--purple); color: #fff; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; transition: background .2s; margin-top: 12px; }
+  .btn-dl-zip:hover { background: #6d28d9; }
+
+  /* ── 라이브 에디터 ── */
+  .live-editor { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
+  .live-editor-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
+  .live-editor-title .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--purple); }
+  .le-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .le-grid .form-group { margin-bottom: 0; }
+  .le-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .btn-recompose { background: var(--purple); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; transition: background .2s; }
+  .btn-recompose:hover { background: #6d28d9; }
+  .btn-next-frame { background: none; border: 1px solid var(--border); color: var(--sub); padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all .2s; }
+  .btn-next-frame:hover { border-color: var(--purple); color: var(--purple); }
+
+  /* ── 통계 바 ── */
+  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+  .stat-card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .stat-val { font-size: 22px; font-weight: 700; font-feature-settings: "tnum"; color: var(--text); }
+  .stat-lbl { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+  /* ── 코드 칩 ── */
+  code { background: var(--bg); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; color: var(--green); }
+</style>
+</head>
+<body>
+
+<!-- ── 헤더 ── -->
+<header class="header">
+  <div class="logo-dot"></div>
+  <div class="logo-text">FCP MultiCam Agent</div>
+  <div class="logo-sub">멀티캠 자동 편집 + 썸네일 생성</div>
+  <button class="btn-cfg" id="btnToggleCfg" onclick="toggleConfig()">⚙ 채널 설정</button>
+</header>
+
+<!-- ── 채널 설정 패널 ── -->
+<div class="config-panel" id="configPanel">
+  <div class="config-inner">
+    <div class="cfg-group">
+      <label>채널명 / 합창단명</label>
+      <input type="text" id="cfgChannelName" placeholder="예: 울림합창단">
+    </div>
+    <div class="cfg-group">
+      <label>채널 태그</label>
+      <input type="text" id="cfgChannelTag" placeholder="예: @WoolimChoir">
+    </div>
+    <div class="cfg-group">
+      <label>공연자 기본값</label>
+      <input type="text" id="cfgPerformer" placeholder="매번 입력 생략">
+    </div>
+    <div class="cfg-group">
+      <label>로고 파일</label>
+      <div class="cfg-upload-area" id="logoDropZone" onclick="document.getElementById('logoInput').click()" ondragover="event.preventDefault()" ondrop="handleLogoDrop(event)">
+        <span id="logoFileName">PNG/SVG 드래그 또는 클릭</span>
+      </div>
+      <input type="file" id="logoInput" accept=".png,.svg,.jpg,.jpeg" style="display:none" onchange="uploadLogo(this)">
+    </div>
+    <div class="cfg-group">
+      <label>제목 폰트</label>
+      <select id="cfgFontTitle">
+        <option value="NanumSquareExtraBold">NanumSquare ExtraBold</option>
+        <option value="NanumGothic">NanumGothic</option>
+        <option value="BebasNeue">Bebas Neue</option>
+        <option value="Oswald">Oswald</option>
+      </select>
+    </div>
+    <div class="cfg-group">
+      <label>서브 폰트</label>
+      <select id="cfgFontSub">
+        <option value="NanumGothic">NanumGothic</option>
+        <option value="NanumSquareExtraBold">NanumSquare ExtraBold</option>
+        <option value="BebasNeue">Bebas Neue</option>
+      </select>
+    </div>
+    <div class="cfg-group">
+      <label>강조색</label>
+      <input type="color" id="cfgAccentColor" value="#22c55e">
+    </div>
+    <div class="cfg-group">
+      <label>기본 레이아웃</label>
+      <div class="layout-radio">
+        <input type="radio" name="cfgLayout" id="cfgLayoutA" value="A">
+        <label for="cfgLayoutA">A</label>
+        <input type="radio" name="cfgLayout" id="cfgLayoutB" value="B" checked>
+        <label for="cfgLayoutB">B</label>
+        <input type="radio" name="cfgLayout" id="cfgLayoutC" value="C">
+        <label for="cfgLayoutC">C</label>
+        <input type="radio" name="cfgLayout" id="cfgLayoutD" value="D">
+        <label for="cfgLayoutD">D</label>
+      </div>
+    </div>
+    <div class="cfg-group">
+      <label>배경 어둡기 <span class="range-val" id="cfgAlphaVal">0.45</span></label>
+      <input type="range" id="cfgOverlayAlpha" min="0" max="1" step="0.05" value="0.45" oninput="document.getElementById('cfgAlphaVal').textContent=this.value">
+    </div>
+    <div class="cfg-group" style="grid-column:1/-1">
+      <label>Anthropic API Key <span id="apiKeyStatus" style="margin-left:8px;font-size:11px"></span></label>
+      <div style="display:flex;gap:8px">
+        <input type="password" id="cfgApiKey" placeholder="sk-ant-…" style="flex:1;font-family:'SF Mono','Fira Code',monospace;font-size:12px" oninput="checkApiKey()">
+        <button onclick="testApiKey()" style="background:none;border:1px solid var(--border);color:var(--sub);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap" id="btnTestKey">연결 테스트</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">config.json에 저장 · <code>ANTHROPIC_API_KEY</code> 환경변수로도 설정 가능</div>
+    </div>
+    <div class="cfg-footer">
+      <button class="btn-save" onclick="saveConfig()">저장</button>
+      <button class="btn-reset" onclick="resetConfig()">초기화</button>
+      <span class="toast" id="cfgToast">✓ 저장되었습니다</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── 메인 ── -->
+<div class="main">
+
+  <!-- ── 좌: 업로드 + 파라미터 ── -->
+  <div>
+    <!-- 카메라 파일 업로드 -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title"><span class="dot"></span> 카메라 파일</div>
+      <div class="dropzone" id="camDropzone"
+           ondragover="handleDragOver(event,'camDropzone')"
+           ondragleave="handleDragLeave('camDropzone')"
+           ondrop="handleCamDrop(event)">
+        <input type="file" id="camInput" multiple accept=".mp4,.mov,.m4v,.mxf"
+               onchange="addCamFiles(this.files)">
+        <div class="dropzone-icon">🎬</div>
+        <div class="dropzone-text">카메라 영상 드래그 또는 <span>파일 선택</span></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">MP4 · MOV · MXF 지원</div>
+      </div>
+      <div class="file-list" id="camFileList"></div>
+    </div>
+
+    <!-- 마스터 오디오 -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title"><span class="dot" style="background:var(--purple);box-shadow:0 0 6px var(--purple)"></span> 마스터 오디오 <span style="font-size:11px;color:var(--muted);margin-left:auto;font-weight:400">없으면 cam1 오디오 사용</span></div>
+      <div class="dropzone" id="audioDropzone"
+           ondragover="handleDragOver(event,'audioDropzone')"
+           ondragleave="handleDragLeave('audioDropzone')"
+           ondrop="handleAudioDrop(event)">
+        <input type="file" id="audioInput" accept=".wav,.mp3,.aac,.m4a,.aif,.aiff"
+               onchange="setAudioFile(this.files[0])">
+        <div class="dropzone-icon">🎵</div>
+        <div class="dropzone-text">보드믹스 / 스테레오 드래그 또는 <span>파일 선택</span></div>
+      </div>
+      <div class="file-list" id="audioFileList"></div>
+    </div>
+
+    <!-- 편집 파라미터 -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title"><span class="dot"></span> 편집 파라미터</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>최소 컷 (초)</label>
+          <input type="number" id="minCutSec" value="3" min="1" max="30" step="0.5">
+        </div>
+        <div class="form-group">
+          <label>최대 컷 (초)</label>
+          <input type="number" id="maxCutSec" value="12" min="2" max="60" step="0.5">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>전환 효과</label>
+          <select id="transitionType">
+            <option value="Dissolve">Cross Dissolve</option>
+            <option value="Cut">Cut (직접)</option>
+            <option value="Dip to Black">Dip to Black</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>전환 길이 (초)</label>
+          <input type="number" id="transitionDur" value="0.5" min="0.1" max="3" step="0.1">
+        </div>
+      </div>
+      <div id="camRolesSection" style="margin-top:8px"></div>
+    </div>
+
+    <!-- 썸네일 파라미터 -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title"><span class="dot purple"></span> 썸네일 파라미터</div>
+      <div class="form-group">
+        <label>노래 제목 <span style="color:#ef4444">*</span></label>
+        <input type="text" id="songTitle" placeholder="예: Ave Maria" style="border-color:var(--purple)">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>공연자</label>
+          <input type="text" id="performer" placeholder="pre-fill from config">
+        </div>
+        <div class="form-group">
+          <label>날짜 / 장소</label>
+          <input type="text" id="dateVenue" placeholder="2026.06.06 서울">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>강조색</label>
+          <input type="color" id="thumbAccent" value="#22c55e">
+        </div>
+        <div class="form-group">
+          <label>레이아웃</label>
+          <select id="thumbLayout">
+            <option value="B">B — 풀스크린 + 하단 바 (추천)</option>
+            <option value="A">A — 좌측 사진 + 우측 텍스트</option>
+            <option value="C">C — 텍스트 중심</option>
+            <option value="D">D — 듀얼 프레임</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>배경 어둡기 <span class="range-val" id="thumbAlphaVal">0.45</span></label>
+        <input type="range" id="thumbAlpha" min="0" max="1" step="0.05" value="0.45" oninput="document.getElementById('thumbAlphaVal').textContent=parseFloat(this.value).toFixed(2)">
+      </div>
+    </div>
+
+    <!-- 자막 스타일 -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title"><span class="dot" style="background:#a78bfa;box-shadow:0 0 6px #a78bfa"></span> 자막 스타일 (FCPXML)</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>폰트</label>
+          <select id="subFont">
+            <option value="Helvetica Neue">Helvetica Neue (기본)</option>
+            <option value="Arial">Arial</option>
+            <option value="Impact">Impact</option>
+            <option value="NanumGothic">나눔고딕</option>
+            <option value="NanumSquareExtraBold">나눔스퀘어 ExtraBold</option>
+            <option value="Apple SD Gothic Neo">Apple SD Gothic Neo</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>크기</label>
+          <input type="number" id="subSize" value="48" min="20" max="100" step="2">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>색상</label>
+          <input type="color" id="subColor" value="#FFFFFF">
+        </div>
+        <div class="form-group">
+          <label>정렬</label>
+          <select id="subAlignment">
+            <option value="center">가운데</option>
+            <option value="left">왼쪽</option>
+            <option value="right">오른쪽</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>위치</label>
+          <select id="subPosition">
+            <option value="bottom">하단 (기본)</option>
+            <option value="center">중앙</option>
+            <option value="top">상단</option>
+          </select>
+        </div>
+        <div class="form-group" style="justify-content:flex-end;flex-direction:row;align-items:center;gap:10px;padding-top:18px">
+          <label style="text-transform:none;font-size:13px;color:var(--text)">굵게</label>
+          <input type="checkbox" id="subBold" checked style="width:16px;height:16px;accent-color:var(--purple);cursor:pointer">
+        </div>
+      </div>
+    </div>
+
+    <!-- 실행 -->
+    <button class="btn-run" id="btnRun" onclick="runPipeline()">▶ 편집 시작</button>
+  </div>
+
+  <!-- ── 우: 진행 + 결과 ── -->
+  <div>
+    <!-- 진행 스테퍼 -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title"><span class="dot"></span> 파이프라인</div>
+      <div class="stepper" id="stepper">
+        <div class="step" id="step-upload"><span class="step-icon">📂</span><span class="step-label">upload</span><span class="step-msg">파일 저장 대기</span></div>
+        <div class="step" id="step-sync"><span class="step-icon">🔊</span><span class="step-label">sync</span><span class="step-msg">오디오 싱크 대기</span></div>
+        <div class="step" id="step-asr"><span class="step-icon">📝</span><span class="step-label">asr</span><span class="step-msg">가사 인식 대기</span></div>
+        <div class="step" id="step-cam_select"><span class="step-icon">🎥</span><span class="step-label">cam_select</span><span class="step-msg">카메라 선택 대기</span></div>
+        <div class="step" id="step-subtitle"><span class="step-icon">💬</span><span class="step-label">subtitle</span><span class="step-msg">자막 삽입 대기</span></div>
+        <div class="step" id="step-transition"><span class="step-icon">✂️</span><span class="step-label">transition</span><span class="step-msg">전환 효과 대기</span></div>
+        <div class="step" id="step-thumb_extract"><span class="step-icon">🖼</span><span class="step-label">thumb_extract</span><span class="step-msg">프레임 추출 대기</span></div>
+        <div class="step" id="step-thumb_score"><span class="step-icon">⭐</span><span class="step-label">thumb_score</span><span class="step-msg">AI 채점 대기</span></div>
+        <div class="step" id="step-thumb_compose"><span class="step-icon">🎨</span><span class="step-label">thumb_compose</span><span class="step-msg">썸네일 합성 대기</span></div>
+        <div class="step" id="step-fcpxml_export"><span class="step-icon">📦</span><span class="step-label">fcpxml_export</span><span class="step-msg">FCPXML 저장 대기</span></div>
+      </div>
+    </div>
+
+    <!-- 결과 -->
+    <div class="result-section" id="resultSection">
+      <!-- FCPXML -->
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-title"><span class="dot"></span> FCPXML 결과</div>
+        <div class="stats-row" id="statsRow">
+          <div class="stat-card"><div class="stat-val" id="statCuts">—</div><div class="stat-lbl">총 컷 수</div></div>
+          <div class="stat-card"><div class="stat-val" id="statDur">—</div><div class="stat-lbl">영상 길이</div></div>
+          <div class="stat-card"><div class="stat-val" id="statCams">—</div><div class="stat-lbl">카메라 수</div></div>
+        </div>
+        <button class="btn-open" id="btnOpenFcp" onclick="openFcpxml()">🎬 Final Cut Pro에서 열기</button>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button id="btnDlSrt" onclick="downloadSubtitle('srt')" style="display:none;background:none;border:1px solid var(--border);color:var(--sub);padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;transition:all .2s" onmouseover="this.style.borderColor='var(--green)';this.style.color='var(--green)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--sub)'">⬇ SRT</button>
+          <button id="btnDlVtt" onclick="downloadSubtitle('vtt')" style="display:none;background:none;border:1px solid var(--border);color:var(--sub);padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;transition:all .2s" onmouseover="this.style.borderColor='var(--green)';this.style.color='var(--green)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--sub)'">⬇ VTT</button>
+        </div>
+        <div id="fcpxmlPath" style="font-size:11px;color:var(--muted)"></div>
+
+        <!-- 타임라인 -->
+        <div style="margin-top:16px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">컷 타임라인</div>
+          <div class="timeline-bar" id="timelineBar"></div>
+          <div class="cam-legend" id="camLegend"></div>
+        </div>
+      </div>
+
+      <!-- 썸네일 -->
+      <div class="card">
+        <div class="card-title"><span class="dot purple"></span> 썸네일</div>
+        <div class="thumb-grid" id="thumbGrid"></div>
+        <div style="display:flex;gap:10px;margin-top:12px">
+          <button class="btn-dl-zip" id="btnDlZip" onclick="downloadZip()">📦 전체 다운로드 (ZIP)</button>
+        </div>
+
+        <!-- 라이브 에디터 -->
+        <div class="live-editor" id="liveEditor">
+          <div class="live-editor-title"><span class="dot"></span> 라이브 에디터</div>
+          <div class="le-grid">
+            <div class="form-group"><label>노래 제목</label><input type="text" id="leTitle" oninput="debouncedRecompose()"></div>
+            <div class="form-group"><label>공연자</label><input type="text" id="lePerformer" oninput="debouncedRecompose()"></div>
+            <div class="form-group"><label>강조색</label><input type="color" id="leAccent" oninput="debouncedRecompose()"></div>
+            <div class="form-group">
+              <label>레이아웃</label>
+              <select id="leLayout" onchange="debouncedRecompose()">
+                <option value="B">B</option>
+                <option value="A">A</option>
+                <option value="C">C</option>
+                <option value="D">D</option>
+              </select>
+            </div>
+            <div class="form-group" style="grid-column:1/-1">
+              <label>배경 어둡기 <span class="range-val" id="leAlphaVal">0.45</span></label>
+              <input type="range" id="leAlpha" min="0" max="1" step="0.05" value="0.45" oninput="document.getElementById('leAlphaVal').textContent=parseFloat(this.value).toFixed(2);debouncedRecompose()">
+            </div>
+          </div>
+          <div class="le-actions">
+            <button class="btn-next-frame" onclick="nextFrame()">→ 다른 프레임으로</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── 자막 생성기 ── -->
+<div style="max-width:1400px;margin:0 auto 40px;padding:0 32px">
+  <div class="card">
+    <div class="card-title"><span class="dot" style="background:#a78bfa;box-shadow:0 0 6px #a78bfa"></span> 자막 생성기 — 영상/음원 또는 YouTube 링크</div>
+
+    <!-- 탭 -->
+    <div style="display:flex;gap:0;margin-bottom:18px;border:1px solid var(--border);border-radius:7px;overflow:hidden;width:fit-content">
+      <button id="subTabFile" onclick="switchSubTab('file')" style="padding:7px 20px;background:var(--green);color:#000;border:none;cursor:pointer;font-size:13px;font-weight:600">📁 파일 업로드</button>
+      <button id="subTabUrl" onclick="switchSubTab('url')" style="padding:7px 20px;background:none;color:var(--sub);border:none;cursor:pointer;font-size:13px">🔗 URL 입력</button>
+    </div>
+
+    <!-- 파일 업로드 탭 -->
+    <div id="subPanelFile">
+      <div class="dropzone" id="subDropzone" style="padding:20px"
+           ondragover="handleDragOver(event,'subDropzone')" ondragleave="handleDragLeave('subDropzone')" ondrop="handleSubDrop(event)">
+        <input type="file" id="subFileInput" accept=".mp4,.mov,.mp3,.wav,.m4a,.aac,.aif,.aiff" onchange="setSubFile(this.files[0])">
+        <div class="dropzone-icon" style="font-size:22px">🎬</div>
+        <div class="dropzone-text">영상 또는 음원 드래그 · <span>파일 선택</span></div>
+      </div>
+      <div id="subFileInfo" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
+    </div>
+
+    <!-- URL 탭 -->
+    <div id="subPanelUrl" style="display:none">
+      <div class="form-group">
+        <label>YouTube / 영상 URL</label>
+        <input type="text" id="subUrlInput" placeholder="https://www.youtube.com/watch?v=…" style="font-size:13px">
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:-8px">YouTube, Vimeo 등 yt-dlp 지원 사이트</div>
+    </div>
+
+    <button onclick="runSubtitleGen()" style="margin-top:16px;background:var(--purple);color:#fff;border:none;padding:10px 24px;border-radius:7px;cursor:pointer;font-size:14px;font-weight:700;transition:background .2s" onmouseover="this.style.background='#6d28d9'" onmouseout="this.style.background='var(--purple)'">📝 자막 생성</button>
+
+    <!-- 진행 -->
+    <div id="subProgress" style="margin-top:14px;font-size:13px;color:var(--sub);display:none"></div>
+
+    <!-- 결과 -->
+    <div id="subResult" style="display:none;margin-top:16px;padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
+      <div id="subResultMsg" style="font-size:13px;color:var(--green);margin-bottom:10px"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button id="subDlSrt" onclick="subDownload('srt')" style="background:none;border:1px solid var(--green);color:var(--green);padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">⬇ SRT 다운로드</button>
+        <button id="subDlVtt" onclick="subDownload('vtt')" style="background:none;border:1px solid var(--border);color:var(--sub);padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">⬇ VTT 다운로드</button>
+        <button id="subDlTxt" onclick="subDownload('txt')" style="background:none;border:1px solid var(--border);color:var(--sub);padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px">⬇ TXT 다운로드</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── 전역 상태 ──────────────────────────────────
+let camFiles = [];
+let audioFile = null;
+let currentFcpxmlPath = '';
+let currentZipPath = '';
+let currentSrtPath = '';
+let currentVttPath = '';
+let topFrames = [];
+let currentFrameIdx = 0;
+let currentThumbnails = [];
+let debounceTimer = null;
+
+// ── 설정 패널 ─────────────────────────────────
+function toggleConfig() {
+  const panel = document.getElementById('configPanel');
+  panel.classList.toggle('open');
+}
+
+async function loadConfig() {
+  try {
+    const resp = await fetch('/config');
+    const cfg = await resp.json();
+    document.getElementById('cfgChannelName').value = cfg.channel_name || '';
+    document.getElementById('cfgChannelTag').value = cfg.channel_tag || '';
+    document.getElementById('cfgPerformer').value = cfg.default_performer || '';
+    document.getElementById('cfgAccentColor').value = cfg.accent_color || '#22c55e';
+    document.getElementById('cfgOverlayAlpha').value = cfg.overlay_alpha ?? 0.45;
+    document.getElementById('cfgAlphaVal').textContent = cfg.overlay_alpha ?? 0.45;
+    document.getElementById('cfgFontTitle').value = cfg.font_title || 'NanumSquareExtraBold';
+    document.getElementById('cfgFontSub').value = cfg.font_sub || 'NanumGothic';
+    // 레이아웃 라디오
+    const layout = cfg.layout || 'B';
+    document.querySelectorAll('input[name="cfgLayout"]').forEach(r => {
+      r.checked = r.value === layout;
+    });
+    // 로고
+    if (cfg.logo_path) {
+      document.getElementById('logoFileName').textContent = cfg.logo_path.split('/').pop();
+    }
+    // API 키
+    if (cfg.anthropic_api_key) {
+      document.getElementById('cfgApiKey').value = cfg.anthropic_api_key;
+      setApiKeyStatus(true, '저장됨');
+    }
+    // 썸네일 파라미터 pre-fill
+    document.getElementById('performer').value = cfg.default_performer || '';
+    document.getElementById('thumbAccent').value = cfg.accent_color || '#22c55e';
+    document.getElementById('thumbAlpha').value = cfg.overlay_alpha ?? 0.45;
+    document.getElementById('thumbAlphaVal').textContent = parseFloat(cfg.overlay_alpha ?? 0.45).toFixed(2);
+    document.getElementById('thumbLayout').value = cfg.layout || 'B';
+  } catch(e) { console.error('config 로드 실패', e); }
+}
+
+async function saveConfig() {
+  const layout = document.querySelector('input[name="cfgLayout"]:checked')?.value || 'B';
+  const cfg = {
+    channel_name: document.getElementById('cfgChannelName').value,
+    channel_tag: document.getElementById('cfgChannelTag').value,
+    default_performer: document.getElementById('cfgPerformer').value,
+    logo_path: document.getElementById('logoFileName').dataset.path || '',
+    font_title: document.getElementById('cfgFontTitle').value,
+    font_sub: document.getElementById('cfgFontSub').value,
+    accent_color: document.getElementById('cfgAccentColor').value,
+    layout,
+    overlay_alpha: parseFloat(document.getElementById('cfgOverlayAlpha').value),
+    text_color: '#FFFFFF',
+    anthropic_api_key: document.getElementById('cfgApiKey').value.trim(),
+  };
+  await fetch('/config', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(cfg) });
+  const toast = document.getElementById('cfgToast');
+  toast.style.opacity = '1';
+  setTimeout(() => toast.style.opacity = '0', 2000);
+}
+
+async function resetConfig() {
+  await fetch('/config/reset');
+  await loadConfig();
+}
+
+async function uploadLogo(input) {
+  if (!input.files[0]) return;
+  const fd = new FormData();
+  fd.append('file', input.files[0]);
+  const resp = await fetch('/upload/logo', { method: 'POST', body: fd });
+  const data = await resp.json();
+  document.getElementById('logoFileName').textContent = input.files[0].name;
+  document.getElementById('logoFileName').dataset.path = data.logo_path;
+}
+
+function handleLogoDrop(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    const input = document.getElementById('logoInput');
+    input.files = dt.files;
+    uploadLogo(input);
+  }
+}
+
+// ── 파일 업로드 ───────────────────────────────
+function handleDragOver(e, id) {
+  e.preventDefault();
+  document.getElementById(id).classList.add('dragover');
+}
+function handleDragLeave(id) {
+  document.getElementById(id).classList.remove('dragover');
+}
+
+function addCamFiles(files) {
+  for (const f of files) camFiles.push(f);
+  renderCamList();
+  updateCamRoles();
+}
+
+function handleCamDrop(e) {
+  e.preventDefault();
+  document.getElementById('camDropzone').classList.remove('dragover');
+  addCamFiles(e.dataTransfer.files);
+}
+
+function removeCam(idx) {
+  camFiles.splice(idx, 1);
+  renderCamList();
+  updateCamRoles();
+}
+
+function renderCamList() {
+  const list = document.getElementById('camFileList');
+  list.innerHTML = camFiles.map((f, i) => `
+    <div class="file-item">
+      <span class="file-badge">CAM ${i+1}</span>
+      ${f.name}
+      <span style="font-size:11px;color:var(--muted);margin-left:8px">${(f.size/1024/1024).toFixed(1)} MB</span>
+      <span class="file-remove" onclick="removeCam(${i})">✕</span>
+    </div>`).join('');
+}
+
+function setAudioFile(file) {
+  if (!file) return;
+  audioFile = file;
+  document.getElementById('audioFileList').innerHTML = `
+    <div class="file-item">
+      <span class="file-badge audio">AUDIO</span>
+      ${file.name}
+      <span style="font-size:11px;color:var(--muted);margin-left:8px">${(file.size/1024/1024).toFixed(1)} MB</span>
+      <span class="file-remove" onclick="clearAudio()">✕</span>
+    </div>`;
+}
+
+function clearAudio() {
+  audioFile = null;
+  document.getElementById('audioFileList').innerHTML = '';
+}
+
+function handleAudioDrop(e) {
+  e.preventDefault();
+  document.getElementById('audioDropzone').classList.remove('dragover');
+  setAudioFile(e.dataTransfer.files[0]);
+}
+
+function updateCamRoles() {
+  const section = document.getElementById('camRolesSection');
+  if (camFiles.length === 0) { section.innerHTML = ''; return; }
+  const roleOptions = ['wide', 'close', 'medium'];
+  const defaultRoles = ['wide', 'close', 'medium', 'wide', 'close'];
+  section.innerHTML = `<div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">카메라 역할</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">` +
+    camFiles.map((f, i) => `
+      <div style="display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px">
+        <span style="font-size:11px;color:var(--green)">CAM${i+1}</span>
+        <select id="camRole${i}" style="background:var(--bg);border:none;color:var(--text);font-size:12px">
+          ${roleOptions.map(r => `<option value="${r}" ${r===defaultRoles[i]?'selected':''}>${r}</option>`).join('')}
+        </select>
+      </div>`).join('') + `</div>`;
+}
+
+function getCamRoles() {
+  const roles = {};
+  for (let i = 0; i < camFiles.length; i++) {
+    const el = document.getElementById(`camRole${i}`);
+    if (el) roles[`cam${i+1}`] = el.value;
+  }
+  return roles;
+}
+
+// ── 파이프라인 실행 ───────────────────────────
+async function runPipeline() {
+  // 로그 창 먼저 열기 (항상)
+  openLogWindow();
+  clearLog();
+  appendLog({ts: '', level: 'info', msg: '▶ 편집 시작 버튼 클릭됨'});
+
+  if (camFiles.length === 0) {
+    appendLog({ts: '', level: 'error', msg: '❌ 카메라 파일이 없습니다. 파일을 드래그하세요.'});
+    document.getElementById('camDropzone').style.borderColor = '#ef4444';
+    setTimeout(() => document.getElementById('camDropzone').style.borderColor = '', 3000);
+    return;
+  }
+  appendLog({ts: '', level: 'info', msg: `✓ 카메라 ${camFiles.length}개: ${camFiles.map(f=>f.name).join(', ')}`});
+
+  if (!document.getElementById('songTitle').value.trim()) {
+    appendLog({ts: '', level: 'error', msg: '❌ 노래 제목을 입력하세요.'});
+    document.getElementById('songTitle').focus();
+    document.getElementById('songTitle').style.borderColor = '#ef4444';
+    setTimeout(() => document.getElementById('songTitle').style.borderColor = '', 3000);
+    return;
+  }
+  appendLog({ts: '', level: 'info', msg: `✓ 노래 제목: ${document.getElementById('songTitle').value}`});
+  document.getElementById('songTitle').style.borderColor = '';
+
+  const btn = document.getElementById('btnRun');
+  btn.disabled = true;
+  btn.textContent = '⏳ 처리 중…';
+  document.getElementById('resultSection').classList.remove('visible');
+
+  // 스테퍼 초기화
+  ['upload','sync','asr','cam_select','subtitle','transition','thumb_extract','thumb_score','thumb_compose','fcpxml_export'].forEach(s => {
+    const el = document.getElementById(`step-${s}`);
+    el.className = 'step';
+    el.querySelector('.step-msg').textContent = '대기 중…';
+  });
+
+  const fd = new FormData();
+  camFiles.forEach(f => fd.append('cameras', f));
+  if (audioFile) fd.append('master_audio', audioFile);
+  fd.append('song_title', document.getElementById('songTitle').value);
+  fd.append('performer', document.getElementById('performer').value);
+  fd.append('date_venue', document.getElementById('dateVenue').value);
+  fd.append('cam_roles', JSON.stringify(getCamRoles()));
+  fd.append('min_cut_sec', document.getElementById('minCutSec').value);
+  fd.append('max_cut_sec', document.getElementById('maxCutSec').value);
+  fd.append('transition_type', document.getElementById('transitionType').value);
+  fd.append('transition_dur', document.getElementById('transitionDur').value);
+  fd.append('layout', document.getElementById('thumbLayout').value);
+  fd.append('accent_color', document.getElementById('thumbAccent').value);
+  fd.append('overlay_alpha', document.getElementById('thumbAlpha').value);
+  fd.append('subtitle_font', document.getElementById('subFont').value);
+  fd.append('subtitle_size', document.getElementById('subSize').value);
+  fd.append('subtitle_color', document.getElementById('subColor').value);
+  fd.append('subtitle_bold', document.getElementById('subBold').checked ? 'true' : 'false');
+  fd.append('subtitle_alignment', document.getElementById('subAlignment').value);
+  fd.append('subtitle_position', document.getElementById('subPosition').value);
+
+  let resp;
+  try {
+    appendLog({ts: '', level: 'info', msg: `파일 전송 중… (카메라 ${camFiles.length}개${audioFile ? ' + 오디오' : ''})`});
+    resp = await fetch('/process', { method: 'POST', body: fd });
+  } catch (err) {
+    appendLog({ts: '', level: 'error', msg: '서버 연결 실패: ' + err.message});
+    alert('서버 연결 실패: ' + err.message);
+    btn.disabled = false; btn.textContent = '▶ 편집 시작';
+    return;
+  }
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    appendLog({ts: '', level: 'error', msg: `HTTP ${resp.status}: ${text.slice(0, 200)}`});
+    alert(`서버 오류 ${resp.status}`);
+    btn.disabled = false; btn.textContent = '▶ 편집 시작';
+    return;
+  }
+
+  appendLog({ts: '', level: 'info', msg: '서버 연결됨 — SSE 수신 중…'});
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const parts = buf.split('\n\n');
+      buf = parts.pop();
+      for (const part of parts) {
+        const lines = part.split('\n');
+        let event = 'message', data = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) event = line.slice(7).trim();
+          if (line.startsWith('data: ')) data = line.slice(6).trim();
+        }
+        if (data) {
+          try { handleSSE(event, JSON.parse(data)); }
+          catch (e) { appendLog({ts: '', level: 'warn', msg: 'SSE 파싱 오류: ' + data.slice(0, 100)}); }
+        }
+      }
+    }
+  } catch (err) {
+    appendLog({ts: '', level: 'error', msg: 'SSE 스트림 오류: ' + err.message});
+  }
+
+  btn.disabled = false;
+  btn.textContent = '▶ 편집 시작';
+}
+
+const CAM_COLORS = ['#22c55e','#3b82f6','#f59e0b','#ef4444','#a78bfa','#ec4899'];
+
+function handleSSE(event, data) {
+  if (event === 'progress') {
+    const stepEl = document.getElementById(`step-${data.step}`);
+    if (stepEl) {
+      stepEl.className = 'step ' + (data.done ? 'done' : 'active');
+      stepEl.querySelector('.step-icon').innerHTML = data.done ? '✅' : '<span class="spin">⟳</span>';
+      stepEl.querySelector('.step-msg').textContent = data.msg;
+    }
+    if (data.cuts) renderTimeline(data.cuts, camFiles.length);
+  } else if (event === 'done') {
+    currentFcpxmlPath = data.fcpxml;
+    currentZipPath = data.zip;
+    currentSrtPath = data.srt || '';
+    currentVttPath = data.vtt || '';
+    topFrames = data.top_frames || [];
+    // SRT/VTT 버튼 표시
+    document.getElementById('btnDlSrt').style.display = currentSrtPath ? 'inline-block' : 'none';
+    document.getElementById('btnDlVtt').style.display = currentVttPath ? 'inline-block' : 'none';
+    currentFrameIdx = 0;
+
+    document.getElementById('fcpxmlPath').textContent = data.fcpxml;
+    document.getElementById('statCuts').textContent = (data.cuts || []).length;
+    document.getElementById('statCams').textContent = camFiles.length;
+
+    // 썸네일 표시
+    renderThumbnails(data.thumbnails);
+    // 라이브 에디터 초기화
+    document.getElementById('leTitle').value = document.getElementById('songTitle').value;
+    document.getElementById('lePerformer').value = document.getElementById('performer').value;
+    document.getElementById('leAccent').value = document.getElementById('thumbAccent').value;
+    document.getElementById('leLayout').value = document.getElementById('thumbLayout').value;
+    document.getElementById('leAlpha').value = document.getElementById('thumbAlpha').value;
+    document.getElementById('leAlphaVal').textContent = parseFloat(document.getElementById('thumbAlpha').value).toFixed(2);
+
+    document.getElementById('resultSection').classList.add('visible');
+    document.getElementById('step-fcpxml_export').className = 'step done';
+    document.getElementById('step-fcpxml_export').querySelector('.step-icon').textContent = '✅';
+  } else if (event === 'error') {
+    console.error('파이프라인 오류:', data);
+    alert('오류: ' + data.msg);
+  }
+}
+
+function renderTimeline(cuts, nCams) {
+  if (!cuts || cuts.length === 0) return;
+  const totalDur = cuts[cuts.length - 1].end;
+  const bar = document.getElementById('timelineBar');
+  bar.innerHTML = cuts.map(c => {
+    const pct = (c.end - c.start) / totalDur * 100;
+    return `<div class="timeline-seg" style="width:${pct}%;background:${CAM_COLORS[c.cam % CAM_COLORS.length]}" title="CAM${c.cam+1} ${c.start.toFixed(1)}s~${c.end.toFixed(1)}s"></div>`;
+  }).join('');
+
+  document.getElementById('statDur').textContent = totalDur.toFixed(0) + 's';
+
+  const legend = document.getElementById('camLegend');
+  legend.innerHTML = Array.from({length: nCams}, (_, i) => `
+    <div class="cam-legend-item">
+      <div class="cam-swatch" style="background:${CAM_COLORS[i % CAM_COLORS.length]}"></div>
+      <span style="color:var(--muted)">CAM${i+1}</span>
+    </div>`).join('');
+}
+
+function renderThumbnails(paths) {
+  const grid = document.getElementById('thumbGrid');
+  if (!paths || paths.length === 0) { grid.innerHTML = '<div style="color:var(--muted);font-size:13px">썸네일 없음</div>'; return; }
+  currentThumbnails = paths;
+  // 주요 3종만 우선 표시 (layout variants, hq 제외)
+  const display = paths.filter(p => !p.includes('_hq') && !p.includes('_bright') && !p.includes('_dark') && !p.includes('_vivid')).slice(0, 4);
+  grid.innerHTML = display.map((p, i) => {
+    const name = p.split('/').pop().replace('.png','');
+    return `<div class="thumb-card" onclick="downloadThumb('${p}')">
+      <img src="/${p}?t=${Date.now()}" alt="썸네일 ${i+1}">
+      <div class="thumb-label">${name}</div>
+    </div>`;
+  }).join('');
+}
+
+function downloadThumb(path) {
+  const a = document.createElement('a');
+  a.href = '/' + path;
+  a.download = path.split('/').pop();
+  a.click();
+}
+
+function downloadZip() {
+  if (!currentZipPath) return;
+  const a = document.createElement('a');
+  a.href = '/' + currentZipPath;
+  a.download = 'thumbnails.zip';
+  a.click();
+}
+
+function openFcpxml() {
+  if (!currentFcpxmlPath) return;
+  fetch('/open/fcpxml?path=' + encodeURIComponent(currentFcpxmlPath));
+}
+
+function downloadSubtitle(type) {
+  const path = type === 'srt' ? currentSrtPath : currentVttPath;
+  if (!path) return;
+  const a = document.createElement('a');
+  a.href = '/' + path;
+  a.download = path.split('/').pop();
+  a.click();
+}
+
+// ── 라이브 에디터 ────────────────────────────
+function debouncedRecompose() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(recompose, 300);
+}
+
+async function recompose() {
+  if (!topFrames.length && !currentThumbnails.length) return;
+  const framePath = topFrames[currentFrameIdx]?.path || '';
+  const params = {
+    frame_path: framePath,
+    song_title: document.getElementById('leTitle').value,
+    performer: document.getElementById('lePerformer').value,
+    accent_color: document.getElementById('leAccent').value,
+    layout: document.getElementById('leLayout').value,
+    overlay_alpha: parseFloat(document.getElementById('leAlpha').value),
+    channel_tag: document.getElementById('cfgChannelTag').value,
+    logo_path: document.getElementById('logoFileName').dataset.path || '',
+    font_title: document.getElementById('cfgFontTitle').value,
+    font_sub: document.getElementById('cfgFontSub').value,
+    text_color: '#FFFFFF',
+  };
+  try {
+    const resp = await fetch('/thumbnail/compose', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(params),
+    });
+    const data = await resp.json();
+    renderThumbnails(data.thumbnails);
+  } catch(e) { console.error('재합성 실패', e); }
+}
+
+function nextFrame() {
+  if (topFrames.length === 0) return;
+  currentFrameIdx = (currentFrameIdx + 1) % topFrames.length;
+  debouncedRecompose();
+}
+
+// ── API 키 ───────────────────────────────────
+function setApiKeyStatus(ok, msg) {
+  const el = document.getElementById('apiKeyStatus');
+  el.textContent = msg;
+  el.style.color = ok ? 'var(--green)' : '#ef4444';
+}
+
+function checkApiKey() {
+  const val = document.getElementById('cfgApiKey').value.trim();
+  if (!val) { setApiKeyStatus(false, ''); return; }
+  if (val.startsWith('sk-ant-')) setApiKeyStatus(true, '형식 OK');
+  else setApiKeyStatus(false, '형식 불일치 (sk-ant- 로 시작해야 함)');
+}
+
+async function testApiKey() {
+  const key = document.getElementById('cfgApiKey').value.trim();
+  if (!key) { setApiKeyStatus(false, 'API 키를 입력하세요'); return; }
+  const btn = document.getElementById('btnTestKey');
+  btn.textContent = '테스트 중…'; btn.disabled = true;
+  try {
+    const resp = await fetch('/test/api-key', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({api_key: key}),
+    });
+    const data = await resp.json();
+    if (data.ok) setApiKeyStatus(true, `✓ 연결 성공 (${data.model})`);
+    else setApiKeyStatus(false, '✗ ' + data.error);
+  } catch(e) {
+    setApiKeyStatus(false, '✗ 서버 오류');
+  } finally {
+    btn.textContent = '연결 테스트'; btn.disabled = false;
+  }
+}
+
+// ── 플로팅 로그 창 ────────────────────────────
+let logEs = null;
+
+function openLogWindow() {
+  document.getElementById('logWindow').classList.add('open');
+  if (logEs) return;
+  logEs = new EventSource('/logs');
+  logEs.onmessage = e => {
+    try { appendLog(JSON.parse(e.data)); } catch(_) {}
+  };
+  logEs.onerror = () => appendLog({level:'warn', ts:'', msg:'로그 연결 끊김 — 재연결 중…'});
+}
+
+function closeLogWindow() {
+  document.getElementById('logWindow').classList.remove('open');
+}
+
+function clearLog() {
+  document.getElementById('logLines').innerHTML = '';
+}
+
+function appendLog({ts, level, msg}) {
+  if (level === 'ping') return;
+  const el = document.getElementById('logLines');
+  const line = document.createElement('div');
+  line.className = `ll ll-${level}`;
+  line.textContent = ts ? `${ts}  ${msg}` : msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+  // 최대 500줄
+  while (el.children.length > 500) el.removeChild(el.firstChild);
+}
+
+
+// ── 자막 생성기 ───────────────────────────────
+let subFile = null;
+let subPaths = {};
+let subCurrentTab = 'file';
+
+function switchSubTab(tab) {
+  subCurrentTab = tab;
+  document.getElementById('subPanelFile').style.display = tab === 'file' ? 'block' : 'none';
+  document.getElementById('subPanelUrl').style.display = tab === 'url' ? 'block' : 'none';
+  document.getElementById('subTabFile').style.background = tab === 'file' ? 'var(--green)' : 'none';
+  document.getElementById('subTabFile').style.color = tab === 'file' ? '#000' : 'var(--sub)';
+  document.getElementById('subTabUrl').style.background = tab === 'url' ? 'var(--purple)' : 'none';
+  document.getElementById('subTabUrl').style.color = tab === 'url' ? '#fff' : 'var(--sub)';
+}
+
+function setSubFile(file) {
+  if (!file) return;
+  subFile = file;
+  document.getElementById('subFileInfo').textContent = `✓ ${file.name}  (${(file.size/1024/1024).toFixed(1)} MB)`;
+  document.getElementById('subFileInfo').style.color = 'var(--green)';
+}
+
+function handleSubDrop(e) {
+  e.preventDefault();
+  document.getElementById('subDropzone').classList.remove('dragover');
+  setSubFile(e.dataTransfer.files[0]);
+}
+
+async function runSubtitleGen() {
+  const prog = document.getElementById('subProgress');
+  const result = document.getElementById('subResult');
+  prog.style.display = 'block';
+  result.style.display = 'none';
+  prog.textContent = '⏳ 준비 중…';
+
+  const fd = new FormData();
+  if (subCurrentTab === 'url') {
+    const url = document.getElementById('subUrlInput').value.trim();
+    if (!url) { prog.textContent = '❌ URL을 입력하세요'; return; }
+    fd.append('url', url);
+  } else {
+    if (!subFile) { prog.textContent = '❌ 파일을 선택하세요'; return; }
+    fd.append('file', subFile);
+  }
+
+  let resp;
+  try {
+    resp = await fetch('/subtitle/generate', { method: 'POST', body: fd });
+  } catch(e) {
+    prog.textContent = '❌ 서버 연결 실패: ' + e.message;
+    return;
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const parts = buf.split('\n\n');
+    buf = parts.pop();
+    for (const part of parts) {
+      const lines = part.split('\n');
+      let event = 'message', data = '';
+      for (const line of lines) {
+        if (line.startsWith('event: ')) event = line.slice(7).trim();
+        if (line.startsWith('data: ')) data = line.slice(6).trim();
+      }
+      if (!data) continue;
+      try {
+        const d = JSON.parse(data);
+        if (event === 'progress') {
+          prog.textContent = '⏳ ' + d.msg;
+        } else if (event === 'done') {
+          subPaths = d;
+          prog.textContent = '✅ 완료';
+          document.getElementById('subResultMsg').textContent = `✓ ${d.count}개 세그먼트 인식 완료`;
+          result.style.display = 'block';
+        } else if (event === 'error') {
+          prog.textContent = '❌ ' + d.msg;
+        }
+      } catch(_) {}
+    }
+  }
+}
+
+function subDownload(type) {
+  const path = subPaths[type];
+  if (!path) return;
+  const a = document.createElement('a');
+  a.href = '/' + path;
+  a.download = path.split('/').pop();
+  a.click();
+}
+
+// ── 초기화 ───────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  loadConfig();
+});
+</script>
+<!-- ── 플로팅 로그 창 ── -->
+<div id="logWindow">
+  <div id="logHeader">
+    <span class="log-dot"></span>
+    <span id="logTitle">서버 로그</span>
+    <div style="margin-left:auto;display:flex;gap:6px">
+      <button onclick="clearLog()" title="지우기">⌫</button>
+      <button onclick="closeLogWindow()" title="닫기">✕</button>
+    </div>
+  </div>
+  <div id="logLines"></div>
+  <div id="logFooter">
+    <button onclick="openLogWindow()">● 연결</button>
+    <span id="logStatus">대기 중</span>
+  </div>
+</div>
+
+<!-- 로그 버튼 (우하단 고정) -->
+<button id="btnLog" onclick="openLogWindow()" title="서버 로그 보기">🖥 로그</button>
+
+<style>
+  /* ── 플로팅 로그 창 ── */
+  #logWindow {
+    position: fixed; bottom: 20px; right: 20px;
+    width: 480px; height: 300px;
+    background: #0d0d0d; border: 1px solid #2a2a2a;
+    border-radius: 10px; display: flex; flex-direction: column;
+    font-family: 'SF Mono','Fira Code',monospace; font-size: 12px;
+    z-index: 999; box-shadow: 0 8px 32px rgba(0,0,0,.6);
+    transform: translateY(120%); opacity: 0;
+    transition: transform .3s ease, opacity .3s ease;
+    pointer-events: none;
+  }
+  #logWindow.open {
+    transform: translateY(0); opacity: 1; pointer-events: all;
+  }
+  #logHeader {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-bottom: 1px solid #1e1e1e;
+    cursor: move; user-select: none; flex-shrink: 0;
+  }
+  #logHeader button {
+    background: none; border: none; color: #6b7280;
+    cursor: pointer; font-size: 13px; padding: 2px 4px;
+    border-radius: 3px; transition: color .15s;
+  }
+  #logHeader button:hover { color: #f3f4f6; }
+  .log-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 5px #22c55e; flex-shrink: 0; }
+  #logTitle { font-size: 12px; color: #9ca3af; letter-spacing: .04em; }
+  #logLines {
+    flex: 1; overflow-y: auto; padding: 8px 12px;
+    scroll-behavior: smooth;
+  }
+  #logLines::-webkit-scrollbar { width: 4px; }
+  #logLines::-webkit-scrollbar-track { background: transparent; }
+  #logLines::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+  .ll { padding: 1px 0; line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
+  .ll-info  { color: #d1d5db; }
+  .ll-error { color: #f87171; }
+  .ll-warn  { color: #fbbf24; }
+  .ll-debug { color: #6b7280; }
+  #logFooter {
+    padding: 5px 12px; border-top: 1px solid #1e1e1e;
+    display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  }
+  #logFooter button {
+    background: none; border: 1px solid #2a2a2a; color: #22c55e;
+    padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 11px;
+  }
+  #logStatus { font-size: 11px; color: #6b7280; }
+
+  /* ── 로그 버튼 ── */
+  #btnLog {
+    position: fixed; bottom: 20px; right: 20px;
+    background: #161616; border: 1px solid #2a2a2a;
+    color: #9ca3af; padding: 8px 14px; border-radius: 8px;
+    cursor: pointer; font-size: 13px; z-index: 998;
+    transition: all .2s;
+  }
+  #btnLog:hover { border-color: #22c55e; color: #22c55e; }
+  #logWindow.open ~ #btnLog { display: none; }
+</style>
+
+<script>
+// 로그 창 드래그
+(function() {
+  let drag = false, ox, oy, elx, ely;
+  const win = document.getElementById('logWindow');
+  const hdr = document.getElementById('logHeader');
+  hdr.addEventListener('mousedown', e => {
+    drag = true;
+    ox = e.clientX; oy = e.clientY;
+    const r = win.getBoundingClientRect();
+    elx = r.left; ely = r.top;
+    win.style.transition = 'none';
+  });
+  document.addEventListener('mousemove', e => {
+    if (!drag) return;
+    const dx = e.clientX - ox, dy = e.clientY - oy;
+    win.style.left = (elx + dx) + 'px';
+    win.style.top  = (ely + dy) + 'px';
+    win.style.bottom = 'auto'; win.style.right = 'auto';
+  });
+  document.addEventListener('mouseup', () => {
+    drag = false;
+    win.style.transition = '';
+  });
+})();
+
+// logEs 상태 → footer 표시
+setInterval(() => {
+  const st = document.getElementById('logStatus');
+  if (!logEs) { st.textContent = '미연결'; return; }
+  const states = ['연결 중…','연결됨','연결 끊김','닫힘'];
+  st.textContent = states[logEs.readyState] || '';
+}, 1000);
+</script>
+</body>
+</html>
