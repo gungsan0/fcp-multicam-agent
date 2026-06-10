@@ -26,10 +26,12 @@ from fastapi.staticfiles import StaticFiles
 # 경로 상수
 # ──────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent
-ASSETS_DIR = BASE_DIR / "assets"
-FONTS_DIR = ASSETS_DIR / "fonts"
-OUTPUT_DIR = BASE_DIR / "output"
-CONFIG_PATH = BASE_DIR / "config.json"
+_IS_VERCEL = os.environ.get("VERCEL") or os.environ.get("NOW_REGION")
+_TMP_ROOT = Path("/tmp") if _IS_VERCEL else BASE_DIR
+ASSETS_DIR = _TMP_ROOT / "assets"
+FONTS_DIR = _TMP_ROOT / "fonts"
+OUTPUT_DIR = _TMP_ROOT / "output"
+CONFIG_PATH = _TMP_ROOT / "config.json"
 
 for d in [ASSETS_DIR, FONTS_DIR, OUTPUT_DIR]:
     d.mkdir(parents=True, exist_ok=True)
